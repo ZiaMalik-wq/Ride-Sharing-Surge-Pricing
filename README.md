@@ -1,8 +1,8 @@
-# Ride-Sharing Surge Pricing Engine 🚀
+# Ride-Sharing Surge Pricing Engine
 
 A real-time, distributed surge pricing engine designed to handle high-throughput ride requests and driver availability updates. This project demonstrates modern data engineering practices using streaming, windowed processing, and low-latency storage.
 
-## 🏗️ System Architecture
+## System Architecture
 
 The engine follows a robust microservices architecture:
 **Data Generator** → **Apache Kafka** → **Apache Flink** → **Redis** → **FastAPI** → **Dashboard**
@@ -15,7 +15,7 @@ The engine follows a robust microservices architecture:
 - **FastAPI**: Serves the computed surge pricing via a RESTful API.
 - **Frontend Dashboard**: A professional operations console for real-time visualization of city-wide surge status.
 
-## ⚡ Key Features
+## Key Features
 
 - **Real-time Processing**: Sub-second price adjustments based on live streaming data.
 - **Windowed Aggregation**: Uses hopping windows to provide responsive pricing updates.
@@ -23,7 +23,7 @@ The engine follows a robust microservices architecture:
 - **Dynamic Pricing**: Implementation of supply-demand equilibrium algorithms.
 - **Live Dashboard**: Visual heatmap of surge multipliers across different operational zones.
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 - **Language**: Python 3.10+
 - **Streaming**: Apache Kafka (Confluent Platform)
@@ -33,7 +33,7 @@ The engine follows a robust microservices architecture:
 - **Infrastructure**: Docker & Docker Compose
 - **Frontend**: Vanilla HTML5, CSS3 (Enterprise Modern), JavaScript
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Docker & Docker Compose
@@ -58,7 +58,7 @@ The engine follows a robust microservices architecture:
    docker-compose -f docker/docker-compose.yml up -d
    ```
 
-## 🏃‍♂️ Running the Pipeline
+## Running the Pipeline
 
 To run the complete system, you need to start the following components in separate terminals:
 
@@ -85,7 +85,7 @@ To run the complete system, you need to start the following components in separa
 5. **View Dashboard**:
    Open `frontend/index.html` in your web browser.
 
-## 📈 Pricing Logic
+## Pricing Logic
 
 The base surge multiplier is calculated using:
 `surge = max(1.0, demand / (supply + 1))`
