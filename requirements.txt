@@ -1,0 +1,7 @@
+confluent-kafka==2.3.0
+redis==5.0.1
+fastapi==0.109.0
+uvicorn==0.27.0
+faker==22.5.1
+apache-flink==1.18.1
+python-dotenv==1.0.1

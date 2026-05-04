@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Zookeeper for Kafka
+  zookeeper:
+    image: bitnami/zookeeper:latest
+    container_name: surge_zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+    networks:
+      - surge_network
+
+  # Kafka Broker
+  kafka:
+    image: bitnami/kafka:latest
+    container_name: surge_kafka
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9092,EXTERNAL://localhost:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_CFG_LISTENERS=CLIENT://:9092,EXTERNAL://:9093
+      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=CLIENT
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    depends_on:
+      - zookeeper
+    networks:
+      - surge_network
+
+  # Redis for storing surge values
+  redis:
+    image: redis:alpine
+    container_name: surge_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - surge_network
+
+  # Flink JobManager
+  jobmanager:
+    image: flink:latest
+    container_name: surge_flink_jobmanager
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+    networks:
+      - surge_network
+
+  # Flink TaskManager
+  taskmanager:
+    image: flink:latest
+    container_name: surge_flink_taskmanager
+    depends_on:
+      - jobmanager
+    command: taskmanager
+    scale: 1
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2
+    networks:
+      - surge_network
+
+networks:
+  surge_network:
+    driver: bridge
