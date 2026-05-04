@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surge Pricing Operations</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Using Inter font for a clean, modern, enterprise look -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="layout">
+        <!-- Sidebar / Control Panel -->
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="logo"></div>
+                <h1>Operations</h1>
+            </div>
+            
+            <div class="system-status">
+                <div class="status-indicator">
+                    <span class="dot" id="connection-dot"></span>
+                    <span id="connection-text">Connecting...</span>
+                </div>
+                <div class="last-updated">
+                    Last sync: <span id="sync-time">--:--:--</span>
+                </div>
+            </div>
+
+            <div class="log-section">
+                <h3>Activity Log</h3>
+                <div class="activity-feed" id="activity-feed">
+                    <!-- Logs will be injected here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            <header class="page-header">
+                <h2>Live Surge Multipliers</h2>
+                <p>Real-time demand mapping across operational zones.</p>
+            </header>
+
+            <div class="grid-container" id="zone-grid">
+                <!-- Zone cards will be injected here by app.js -->
+            </div>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,28 +1,24 @@
 import os
-import json
 from pyflink.table import EnvironmentSettings, TableEnvironment
 from pyflink.table.expressions import col
 
 def run_surge_processor():
-    # 1. Setup Table Environment
+    # 1. Setup Environment
     settings = EnvironmentSettings.new_instance().in_streaming_mode().build()
     t_env = TableEnvironment.create(settings)
 
     # 2. Add Kafka Connector JAR
-    # Since we are running in Docker, we point to the volume-mapped lib folder
-    # or download it if it's not there.
     jar_path = "/opt/flink/project/lib/flink-sql-connector-kafka-3.0.1-1.18.jar"
     t_env.get_config().set("pipeline.jars", f"file://{jar_path}")
 
     # 3. Define Kafka Source: Ride Requests
-    # Note: Using 'kafka:29092' for internal Docker communication
     t_env.execute_sql("""
         CREATE TABLE ride_requests (
-            timestamp_str STRING,
+            `timestamp` STRING,
             zone_id STRING,
             event_type STRING,
             user_id STRING,
-            ts AS TO_TIMESTAMP(REPLACE(timestamp_str, 'T', ' ')),
+            ts AS TO_TIMESTAMP(REPLACE(`timestamp`, 'T', ' ')),
             WATERMARK FOR ts AS ts - INTERVAL '5' SECOND
         ) WITH (
             'connector' = 'kafka',
@@ -37,11 +33,11 @@ def run_surge_processor():
     # 4. Define Kafka Source: Driver Updates
     t_env.execute_sql("""
         CREATE TABLE driver_updates (
-            timestamp_str STRING,
+            `timestamp` STRING,
             zone_id STRING,
             event_type STRING,
             driver_id STRING,
-            ts AS TO_TIMESTAMP(REPLACE(timestamp_str, 'T', ' ')),
+            ts AS TO_TIMESTAMP(REPLACE(`timestamp`, 'T', ' ')),
             WATERMARK FOR ts AS ts - INTERVAL '5' SECOND
         ) WITH (
             'connector' = 'kafka',
@@ -53,7 +49,7 @@ def run_surge_processor():
         )
     """)
 
-    # 5. Define Windowed Aggregations
+    # 5. Define Windowed Aggregations (10s sliding window)
     demand_table = t_env.sql_query("""
         SELECT 
             zone_id, 
@@ -75,7 +71,8 @@ def run_surge_processor():
     t_env.create_temporary_view("supply_view", supply_table)
 
     # 6. Compute Surge Multiplier
-    surge_table = t_env.sql_query("""
+    t_env.execute_sql("""
+        CREATE TEMPORARY VIEW surge_table AS
         SELECT 
             d.zone_id,
             d.window_end as ts,
@@ -84,11 +81,30 @@ def run_surge_processor():
         LEFT JOIN supply_view s ON d.zone_id = s.zone_id AND d.window_end = s.window_end
     """)
 
-    # 7. Output Result
-    # For Phase 3/4, we'll use print() to verify Flink is working.
-    # In Phase 4, we will connect this to a formal Redis Sink.
-    print("Submitting Surge Pricing Flink Job to Docker Cluster...")
-    surge_table.execute().print()
+    # 7. Define Kafka Sink for Output
+    # We use 'upsert-kafka' because the GROUP BY produces updates/retractions
+    t_env.execute_sql("""
+        CREATE TABLE surge_output (
+            zone_id STRING,
+            ts TIMESTAMP(3),
+            surge_multiplier DOUBLE,
+            PRIMARY KEY (zone_id) NOT ENFORCED
+        ) WITH (
+            'connector' = 'upsert-kafka',
+            'topic' = 'surge_pricing',
+            'properties.bootstrap.servers' = 'kafka:29092',
+            'key.format' = 'json',
+            'value.format' = 'json'
+        )
+    """)
+
+    # 8. Insert processed data into Output Topic
+    print("Starting Flink Job: Sinking Surge Multipliers to Kafka...")
+    t_env.execute_sql("""
+        INSERT INTO surge_output
+        SELECT zone_id, ts, surge_multiplier
+        FROM surge_table
+    """)
 
 if __name__ == '__main__':
     run_surge_processor()
