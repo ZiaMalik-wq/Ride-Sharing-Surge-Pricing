@@ -116,7 +116,6 @@ celerybeat.pid
 *.sage.py
 
 # Environments
-.env
 .venv
 env/
 venv/
@@ -152,7 +151,8 @@ cython_debug/
 .idea/
 
 # VS Code
-.vscode/
 
 # JAR dependencies
 lib/
+config.bat
+node_modules
