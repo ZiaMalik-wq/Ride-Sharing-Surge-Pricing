@@ -70,6 +70,25 @@ services:
     networks:
       - surge_network
 
+  cassandra:
+    image: cassandra:latest
+    container_name: surge_cassandra
+    ports:
+      - "9042:9042"
+    volumes:
+      - ..:/opt/flink/project
+    environment:
+      - CASSANDRA_CLUSTER_NAME=SurgeCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+    networks:
+      - surge_network
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 networks:
   surge_network:
     driver: bridge
