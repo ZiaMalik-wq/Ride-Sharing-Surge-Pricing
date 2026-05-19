@@ -1,3 +1,9 @@
+# Ride-Sharing Surge Pricing — Infrastructure
+#
+# NOTE: Zookeeper is used here because Confluent Platform 7.5 still defaults
+# to it.  Kafka 3.5+ supports KRaft (no Zookeeper) — consider migrating once
+# the Confluent images fully support KRaft in production.
+
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
@@ -5,16 +11,26 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+      ZOOKEEPER_4LW_COMMANDS_WHITELIST: ruok
     ports:
       - "2181:2181"
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+      - zookeeper_log:/var/lib/zookeeper/log
     networks:
       - surge_network
+    healthcheck:
+      test: ["CMD", "cub", "zk-ready", "localhost:2181", "30"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: surge_kafka
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9092:9092"
     environment:
@@ -23,16 +39,38 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka_data:/var/lib/kafka/data
     networks:
       - surge_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     container_name: surge_redis
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - surge_network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   jobmanager:
     build:
@@ -40,6 +78,9 @@ services:
       dockerfile: flink/Dockerfile
     container_name: surge_flink_jobmanager
     command: jobmanager
+    depends_on:
+      kafka:
+        condition: service_healthy
     ports:
       - "8081:8081"
     volumes:
@@ -49,8 +90,15 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         jobmanager.bind-host: 0.0.0.0
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis
+      - CASSANDRA_HOST=cassandra
     networks:
       - surge_network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
 
   taskmanager:
     build:
@@ -67,22 +115,36 @@ services:
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 2
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - REDIS_HOST=redis
+      - CASSANDRA_HOST=cassandra
     networks:
       - surge_network
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
 
   cassandra:
-    image: cassandra:latest
+    image: cassandra:4.1
     container_name: surge_cassandra
     ports:
       - "9042:9042"
     volumes:
       - ..:/opt/flink/project
+      - cassandra_data:/var/lib/cassandra
     environment:
       - CASSANDRA_CLUSTER_NAME=SurgeCluster
       - CASSANDRA_DC=dc1
       - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=200M
     networks:
       - surge_network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     healthcheck:
       test: ["CMD-SHELL", "nodetool status"]
       interval: 30s
@@ -92,3 +154,10 @@ services:
 networks:
   surge_network:
     driver: bridge
+
+volumes:
+  zookeeper_data:
+  zookeeper_log:
+  kafka_data:
+  redis_data:
+  cassandra_data:

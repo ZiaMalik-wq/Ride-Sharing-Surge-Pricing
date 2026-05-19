@@ -1,15 +1,33 @@
-import json
-import redis
+"""Surge Pricing API — application assembly.
+
+This module creates the FastAPI application instance and wires together:
+- Lifespan management (``dependencies.py``)
+- CORS middleware
+- Custom exception handlers (``exceptions.py``)
+- Route definitions (``routes.py``)
+"""
+
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.dependencies import lifespan
+from src.api.exceptions import ServiceUnavailableError, ZoneNotFoundError
+from src.api.routes import router
+
+# ---------------------------------------------------------------------------
+# Application
+# ---------------------------------------------------------------------------
+
 app = FastAPI(
     title="Surge Pricing API",
-    description="Real-time surge pricing engine powered by Apache Flink and Redis",
-    version="1.0.0"
+    description="Real-time surge pricing engine with live and historical analytics endpoints",
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
-# Allow Cross-Origin requests from any frontend
+# TODO: Lock down origins to the actual dashboard domain(s) before production.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,50 +36,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Connect to Redis
-try:
-    r = redis.Redis(host='localhost', port=6379, decode_responses=True)
-    r.ping()
-except Exception as e:
-    print(f"Error connecting to Redis: {e}")
 
-@app.get("/")
-def root():
-    return {"status": "online", "message": "Surge Pricing API is running."}
+# ---------------------------------------------------------------------------
+# Custom exception handlers
+# ---------------------------------------------------------------------------
 
-@app.get("/surge")
-def get_all_surge_prices():
-    """
-    Returns the current surge multipliers for all active zones.
-    """
-    try:
-        keys = r.keys("surge:*")
-        if not keys:
-            return {"data": []}
-            
-        # Fetch all values in one go
-        values = r.mget(keys)
-        
-        results = []
-        for key, val in zip(keys, values):
-            if val:
-                results.append(json.loads(val))
-                
-        return {"data": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+@app.exception_handler(ZoneNotFoundError)
+async def zone_not_found_handler(request, exc: ZoneNotFoundError):
+    raise HTTPException(status_code=404, detail=str(exc))
 
-@app.get("/surge/{zone_id}")
-def get_surge_by_zone(zone_id: str):
-    """
-    Returns the current surge multiplier for a specific zone.
-    Example: /surge/zone_1
-    """
-    try:
-        val = r.get(f"surge:{zone_id}")
-        if val:
-            return {"data": json.loads(val)}
-        else:
-            return {"data": {"zone_id": zone_id, "surge_multiplier": 1.0, "message": "No active surge"}}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+@app.exception_handler(ServiceUnavailableError)
+async def service_unavailable_handler(request, exc: ServiceUnavailableError):
+    raise HTTPException(status_code=503, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Mount routes
+# ---------------------------------------------------------------------------
+
+app.include_router(router)

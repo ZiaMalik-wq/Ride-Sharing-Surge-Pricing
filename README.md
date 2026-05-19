@@ -5,92 +5,146 @@ A real-time, distributed surge pricing engine designed to handle high-throughput
 ## System Architecture
 
 The engine follows a robust microservices architecture:
-**Data Generator** → **Apache Kafka** → **Apache Flink** → **Redis** → **FastAPI** → **Dashboard**
+Data Generator → Apache Kafka → Apache Flink → Redis → FastAPI → Dashboard
 
-- **Data Generator**: Simulates real-time ride requests and driver telemetry using the `Faker` library.
-- **Apache Kafka**: Acts as the high-throughput message backbone, ensuring event durability and ordering.
-- **Apache Flink**: The core processing engine. It performs stateful windowed aggregations (10s hopping windows) to calculate live demand-to-supply ratios using Flink SQL.
-- **Redis Sink**: A dedicated microservice that bridges Kafka and Redis for low-latency state persistence.
-- **Redis**: Provides sub-millisecond access to current surge multipliers.
-- **FastAPI**: Serves the computed surge pricing via a RESTful API.
-- **Frontend Dashboard**: A professional operations console for real-time visualization of city-wide surge status.
+Historical archive path: Apache Flink → Kafka → Cassandra Sink → Apache Cassandra
+
+- Data Generator: Simulates real-time ride requests and driver telemetry using Python.
+- Apache Kafka: Message backbone for events.
+- Apache Flink: Stateful processing for windowed aggregations.
+- Redis Sink: Bridges Kafka → Redis for low-latency state persistence.
+- Cassandra Sink: Archives surge history for offline analytics.
+- FastAPI: Exposes computed surge pricing via REST.
+- Frontend Dashboard: Visual heatmap of surge multipliers.
 
 ## Key Features
 
-- **Real-time Processing**: Sub-second price adjustments based on live streaming data.
-- **Windowed Aggregation**: Uses hopping windows to provide responsive pricing updates.
-- **Scalable Design**: Topics are partitioned by `zone_id` to allow horizontal scaling of the Flink cluster.
-- **Dynamic Pricing**: Implementation of supply-demand equilibrium algorithms.
-- **Live Dashboard**: Visual heatmap of surge multipliers across different operational zones.
+- Real-time processing with hopping windows.
+- Scalable partitioning by `zone_id`.
+- Low-latency reads from Redis for live pricing.
+- Optional archival to Cassandra for historical analysis.
 
 ## Tech Stack
 
-- **Language**: Python 3.10+
-- **Streaming**: Apache Kafka (Confluent Platform)
-- **Processing**: Apache Flink (PyFlink Table API)
-- **Storage**: Redis 7
-- **API**: FastAPI & Uvicorn
-- **Infrastructure**: Docker & Docker Compose
-- **Frontend**: Vanilla HTML5, CSS3 (Enterprise Modern), JavaScript
+- Python 3.10+
+- Kafka, Flink (PyFlink), Redis, Cassandra
+- FastAPI + Uvicorn
+- Docker & Docker Compose
+- Simple static frontend (HTML/CSS/JS)
 
-## Getting Started
+## Getting Started (Local Development)
+
+These instructions get a developer environment running on Windows, macOS, or Linux.
 
 ### Prerequisites
+
 - Docker & Docker Compose
 - Python 3.10+
 
-### Setup
-1. **Clone the repository**:
-   ```bash
-   git clone git@github.com:ZiaMalik-wq/Ride-Sharing-Surge-Pricing.git
-   cd Ride-Sharing-Surge-Pricing
-   ```
+### Quick Setup (recommended)
 
-2. **Initialize Python Environment**:
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   pip install -r requirements.txt
-   ```
+1. Clone the repository:
 
-3. **Launch Infrastructure**:
-   ```bash
-   docker-compose -f docker/docker-compose.yml up -d
-   ```
+```bash
+git clone https://github.com/ZiaMalik-wq/Ride-Sharing-Surge-Pricing.git
+cd Ride-Sharing-Surge-Pricing
+```
 
-## Running the Pipeline
+2. Create and activate a virtual environment, then install Python deps:
 
-To run the complete system, you need to start the following components in separate terminals:
+Windows (PowerShell):
 
-1. **Start Data Generator**:
-   ```powershell
-   python src/generator/producer.py
-   ```
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-2. **Submit Flink Job**:
-   ```powershell
-   docker exec -it surge_flink_jobmanager flink run -py /opt/flink/project/src/processor/processor.py
-   ```
+macOS / Linux:
 
-3. **Start Redis Sink**:
-   ```powershell
-   python src/processor/redis_sink.py
-   ```
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
 
-4. **Start API Service**:
-   ```powershell
-   uvicorn src.api.main:app --reload --port 8000
-   ```
+3. (Optional) Download sample datasets into the local `data/` folder:
 
-5. **View Dashboard**:
-   Open `frontend/index.html` in your web browser.
+```bash
+python src/scripts/download_data.py
+```
 
-## Pricing Logic
+Note: The `data/` folder is intentionally excluded from Git (see `.gitignore`).
 
-The base surge multiplier is calculated using:
-`surge = max(1.0, demand / (supply + 1))`
+4. Start required services with Docker Compose:
 
-The system captures windows of data and computes the ratio of ride requests (demand) to available drivers (supply) per zone, updating the price dynamically as new data arrives.
+```bash
+docker-compose -f docker/docker-compose.yml up -d
+```
+
+5. Start the full pipeline (convenience script):
+
+Windows (recommended):
+
+```powershell
+.\start_pipeline.ps1
+```
+
+Linux / macOS:
+
+```bash
+bash start_pipeline.sh
+```
+
+The startup script will:
+
+- start Docker containers
+- initialize Cassandra schema
+- submit the Flink job
+- start the data producer and sinks
+- launch the FastAPI server
+
+### Run components manually
+
+If you prefer running components in separate terminals:
+
+- Start the data generator:
+
+```powershell
+python src/generator/producer.py
+```
+
+- Submit the Flink job (runs inside the Flink container):
+
+```bash
+docker exec -it surge_flink_jobmanager flink run -py /opt/flink/project/src/processor/processor.py
+```
+
+- Run Redis sink:
+
+```powershell
+python src/processor/redis_sink.py
+```
+
+- Run Cassandra sink (optional):
+
+```powershell
+python src/processor/cassandra_sink.py
+```
+
+- Start the API server:
+
+```powershell
+uvicorn src.api.main:app --reload --port 8000
+```
+
+- Open the dashboard at `frontend/index.html` in your browser to view live multipliers.
+
+## Notes
+
+- The `data/` directory is excluded from version control to prevent committing large or sensitive datasets. Use `src/scripts/download_data.py` to fetch sample input data locally.
+- If you modify Docker or network ports, update the compose file and any corresponding client URLs in `frontend/index.html` or `src/api/config.py`.
 
 ---
-*Developed as a demonstration of production-grade real-time data engineering pipelines.*
+
+_Developed as a demonstration of production-grade real-time data engineering pipelines._
